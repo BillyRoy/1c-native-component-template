@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Attach to 1C (Windows)",
+            "type": "cppvsdbg",
+            "request": "attach",
+            "processId": "${command:pickProcess}"
+        },
+        {
+            "name": "Attach to 1C (Linux)",
+            "type": "lldb",
+            "request": "attach",
+            "program": "/opt/1cv8/x86_64/current/1cv8c",
+            "processName": "1cv8c"
+        }
+    ]
+}

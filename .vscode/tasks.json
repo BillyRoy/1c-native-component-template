@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Project (Debug)",
+            "type": "shell",
+            // Универсальная команда, которая работает везде
+            "command": "cmake -DBUILD_TYPE=debug -P build.cmake",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "clear": true
+            },
+            // Добавляем problem matchers для MSVC (Windows) и GCC/Clang (Linux)
+            "problemMatcher": [
+                "$msCompile",
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Build Project (Release)",
+            "type": "shell",
+            // Универсальная команда, которая работает везде
+            "command": "cmake -DBUILD_TYPE=release -P build.cmake",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "clear": true
+            },
+            "problemMatcher": [
+                "$msCompile",
+                "$gcc"
+            ]
+        }
+    ]
+}
