@@ -11,10 +11,10 @@ ENDIF()
 # Список исходных файлов проекта
 SET(AddInNative_SRC 
     src/AddInNative.cpp
+    src/TcpClient.cpp
     src/dllmain.cpp
     src/stdafx.cpp
 )
-
 # Добавление специфичных для Windows файлов
 if (WIN32)
     LIST(APPEND AddInNative_SRC src/AddInNative.rc src/AddInNative.def)
@@ -34,6 +34,10 @@ endif()
 
 # Создание разделяемой библиотеки (DLL)
 add_library(${PROJECT_NAME} SHARED ${AddInNative_SRC})
+
+if (WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
+endif()
 
 # Определяем имя ОС в нижнем регистре
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
