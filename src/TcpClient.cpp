@@ -61,7 +61,7 @@ bool TcpClient::connectTo(const std::string& host, int port, std::string& err) {
 
     m_connected = true;
     m_running = true;
-    m_thread = std::thread(&TcpClient::recvLoop, this);
+    //m_thread = std::thread(&TcpClient::recvLoop, this);
     err.clear();
     return true;
 #else

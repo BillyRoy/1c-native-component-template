@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bundle xmlns="http://v8.1c.ru/8.2/addin/bundle">
+    <component os="Windows" path="AddInNative_x86_64.dll" type = "native" arch="x86_64">
+        <name>vk_tcp</name>
+    </component>
+</bundle>

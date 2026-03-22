@@ -16,6 +16,7 @@
 #include "AddInNative.h"
 #include "TcpClient.h"
 #include "utils.h"
+#include <windows.h>
 
 static const wchar_t *g_PropNames[] = {
     L"ErrorMsg",
@@ -60,6 +61,7 @@ static const WCHAR_T g_kClassNames[] = u"CAddInNative";
 static AppCapabilities g_capabilities = eAppCapabilitiesInvalid;
 static std::u16string s_names(g_kClassNames);
 
+
 //---------------------------------------------------------------------------//
 long GetClassObject(const WCHAR_T *wsName, IComponentBase **pInterface) {
     if (!*pInterface) {
@@ -101,7 +103,7 @@ const WCHAR_T *GetClassNames() {
 CAddInNative::CAddInNative() {
     m_iMemory = nullptr;
     m_iConnect = nullptr;
-    m_tcp = std::make_unique<TcpClient>();
+    //m_tcp = std::make_unique<TcpClient>();
 }
 
 //---------------------------------------------------------------------------//
@@ -362,6 +364,10 @@ bool CAddInNative::CallAsFunc(const long lMethodNum, tVariant *pvarRetValue,
             case eMethInitialize: {
                 if (lSizeArray != 2)
                     return false;
+
+                if (!m_tcp) {
+                     m_tcp = std::make_unique<TcpClient>();
+                }    
 
                 std::wstring whost = variantToWString(paParams[0]);
                 int port = variantToInt(paParams[1]);
