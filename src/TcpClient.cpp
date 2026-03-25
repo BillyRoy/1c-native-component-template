@@ -5,8 +5,6 @@
 #pragma comment(lib, "Ws2_32.lib")
 #endif
 
-#include <chrono>
-
 TcpClient::TcpClient() {
 #ifdef _WIN32
     WSADATA wsa{};
@@ -25,8 +23,7 @@ TcpClient::~TcpClient() {
 bool TcpClient::connectTo(const std::string& host, int port, std::string& err) {
 #ifdef _WIN32
     if (m_connected) {
-        err.clear();
-        return true;
+        disconnect(err);
     }
 
     addrinfo hints{};
@@ -35,10 +32,10 @@ bool TcpClient::connectTo(const std::string& host, int port, std::string& err) {
     hints.ai_protocol = IPPROTO_TCP;
 
     addrinfo* result = nullptr;
-    std::string portStr = std::to_string(port);
+    const std::string portStr = std::to_string(port);
 
-    int rc = getaddrinfo(host.c_str(), portStr.c_str(), &hints, &result);
-    if (rc != 0) {
+    const int rc = getaddrinfo(host.c_str(), portStr.c_str(), &hints, &result);
+    if (rc != 0 || result == nullptr) {
         err = "getaddrinfo failed";
         return false;
     }
@@ -50,18 +47,15 @@ bool TcpClient::connectTo(const std::string& host, int port, std::string& err) {
         return false;
     }
 
-    rc = ::connect(m_socket, result->ai_addr, (int)result->ai_addrlen);
-    freeaddrinfo(result);
-
-    if (rc == SOCKET_ERROR) {
+    if (::connect(m_socket, result->ai_addr, static_cast<int>(result->ai_addrlen)) == SOCKET_ERROR) {
+        freeaddrinfo(result);
         closeSocket();
-        err = "connect failed";
+        err = "connect failed: " + std::to_string(WSAGetLastError());
         return false;
     }
 
+    freeaddrinfo(result);
     m_connected = true;
-    m_running = true;
-    //m_thread = std::thread(&TcpClient::recvLoop, this);
     err.clear();
     return true;
 #else
@@ -72,19 +66,15 @@ bool TcpClient::connectTo(const std::string& host, int port, std::string& err) {
 
 bool TcpClient::disconnect(std::string& err) {
     err.clear();
-    m_running = false;
-    m_connected = false;
 
 #ifdef _WIN32
-    if (m_socket != INVALID_SOCKET)
+    if (m_socket != INVALID_SOCKET) {
         shutdown(m_socket, SD_BOTH);
+    }
 #endif
 
-    if (m_thread.joinable())
-        m_thread.join();
-
     closeSocket();
-    m_cv.notify_all();
+    m_connected = false;
     return true;
 }
 
@@ -96,15 +86,25 @@ bool TcpClient::sendBytes(const std::string& data, std::string& err) {
     }
 
     int sentTotal = 0;
-    int total = (int)data.size();
+    const int total = static_cast<int>(data.size());
 
     while (sentTotal < total) {
-        int n = ::send(m_socket, data.data() + sentTotal, total - sentTotal, 0);
-        if (n <= 0) {
+        const int n = ::send(m_socket, data.data() + sentTotal, total - sentTotal, 0);
+        if (n == SOCKET_ERROR) {
+            const int wsaErr = WSAGetLastError();
             m_connected = false;
-            err = "send failed";
+            closeSocket();
+            err = "send failed: " + std::to_string(wsaErr);
             return false;
         }
+
+        if (n == 0) {
+            m_connected = false;
+            closeSocket();
+            err = "send returned 0";
+            return false;
+        }
+
         sentTotal += n;
     }
 
@@ -116,68 +116,82 @@ bool TcpClient::sendBytes(const std::string& data, std::string& err) {
 #endif
 }
 
+std::optional<std::string> TcpClient::receive(int timeoutMs, std::string& err) {
+#ifdef _WIN32
+    if (!m_connected) {
+        err = "socket is not connected";
+        return std::nullopt;
+    }
+
+    if (timeoutMs < 0) {
+        timeoutMs = 0;
+    }
+
+    fd_set readSet;
+    FD_ZERO(&readSet);
+    FD_SET(m_socket, &readSet);
+
+    timeval tv{};
+    timeval* tvPtr = nullptr;
+
+    if (timeoutMs > 0) {
+        tv.tv_sec = timeoutMs / 1000;
+        tv.tv_usec = (timeoutMs % 1000) * 1000;
+        tvPtr = &tv;
+    }
+
+    const int sel = select(0, &readSet, nullptr, nullptr, tvPtr);
+
+    if (sel == 0) {
+        // Таймаут: данных нет, соединение остается открытым
+        err.clear();
+        return std::nullopt;
+    }
+
+    if (sel == SOCKET_ERROR) {
+        const int wsaErr = WSAGetLastError();
+        m_connected = false;
+        closeSocket();
+        err = "select failed: " + std::to_string(wsaErr);
+        return std::nullopt;
+    }
+
+    char buffer[4096];
+    const int n = recv(m_socket, buffer, static_cast<int>(sizeof(buffer)), 0);
+
+    if (n > 0) {
+        err.clear();
+        return std::string(buffer, n);
+    }
+
+    if (n == 0) {
+        // Сервер закрыл соединение
+        m_connected = false;
+        closeSocket();
+        err = "connection closed by peer";
+        return std::nullopt;
+    }
+
+    const int wsaErr = WSAGetLastError();
+
+    if (wsaErr == WSAEWOULDBLOCK) {
+        // Для неблокирующего сокета это не критическая ошибка
+        err.clear();
+        return std::nullopt;
+    }
+
+    m_connected = false;
+    closeSocket();
+    err = "recv failed: " + std::to_string(wsaErr);
+    return std::nullopt;
+#else
+    err = "platform not implemented";
+    return std::nullopt;
+#endif
+}
+
 bool TcpClient::isConnected() const {
     return m_connected;
-}
-
-bool TcpClient::hasMessage() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return !m_queue.empty();
-}
-
-size_t TcpClient::queueSize() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_queue.size();
-}
-
-std::optional<std::string> TcpClient::popMessage() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_queue.empty())
-        return std::nullopt;
-
-    std::string msg = std::move(m_queue.front());
-    m_queue.pop_front();
-    return msg;
-}
-
-std::optional<std::string> TcpClient::receive(int timeoutMs) {
-    std::unique_lock<std::mutex> lock(m_mutex);
-
-    if (m_queue.empty() && timeoutMs > 0) {
-        m_cv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [this]() {
-            return !m_queue.empty() || !m_running;
-        });
-    }
-
-    if (m_queue.empty())
-        return std::nullopt;
-
-    std::string msg = std::move(m_queue.front());
-    m_queue.pop_front();
-    return msg;
-}
-
-void TcpClient::recvLoop() {
-#ifdef _WIN32
-    char buffer[4096];
-
-    while (m_running) {
-        int n = recv(m_socket, buffer, sizeof(buffer), 0);
-        if (n > 0) {
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                m_queue.emplace_back(buffer, buffer + n);
-            }
-            m_cv.notify_one();
-        } else {
-            m_connected = false;
-            m_running = false;
-            break;
-        }
-    }
-
-    m_cv.notify_all();
-#endif
 }
 
 void TcpClient::closeSocket() {

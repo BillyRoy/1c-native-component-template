@@ -1,15 +1,12 @@
 #pragma once
 
+#include <optional>
+#include <string>
+
+#ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <string>
-#include <deque>
-#include <mutex>
-#include <thread>
-#include <atomic>
-#include <condition_variable>
-#include <optional>
-
+#endif
 
 class TcpClient {
 public:
@@ -20,26 +17,18 @@ public:
     bool disconnect(std::string& err);
     bool sendBytes(const std::string& data, std::string& err);
 
-    bool isConnected() const;
-    bool hasMessage() const;
-    size_t queueSize() const;
+    std::optional<std::string> receive(int timeoutMs, std::string& err);
 
-    std::optional<std::string> popMessage();
-    std::optional<std::string> receive(int timeoutMs);
+    bool isConnected() const;
 
 private:
-    void recvLoop();
     void closeSocket();
 
 private:
 #ifdef _WIN32
     SOCKET m_socket = INVALID_SOCKET;
+#else
+    int m_socket = -1;
 #endif
-    std::atomic<bool> m_connected{false};
-    std::atomic<bool> m_running{false};
-    std::thread m_thread;
-
-    mutable std::mutex m_mutex;
-    std::condition_variable m_cv;
-    std::deque<std::string> m_queue;
+    bool m_connected = false;
 };

@@ -18,20 +18,15 @@ public:
     {
         ePropErrorMsg = 0,
         ePropConnected,
-        ePropQueueSize,
         eLastProp
     };
 
     enum Methods
     {
         eMethInitialize = 0,
-        eMethSendCommand,
         eMethGetStatus,
         eMethDisconnect,
-        eMethHasMessage,
-        eMethPopMessage,
         eMethReceive,
-        eMethGetVersion,
         eLastMethod
     };
 
@@ -58,7 +53,7 @@ public:
                                                    const long lMethodAlias) override;
     virtual long ADDIN_API GetNParams(const long lMethodNum) override;
     virtual bool ADDIN_API GetParamDefValue(const long lMethodNum, const long lParamNum,
-                                            tVariant *pvarParamDefValue) override;
+                                            tVariant* pvarParamDefValue) override;
     virtual bool ADDIN_API HasRetVal(const long lMethodNum) override;
     virtual bool ADDIN_API CallAsProc(const long lMethodNum,
                                       tVariant* paParams, const long lSizeArray) override;
@@ -78,7 +73,6 @@ private:
     bool allocAndCopyWString(const wchar_t* src, WCHAR_T** out) const;
     bool returnWString(const std::wstring& value, tVariant* ret) const;
     void returnBool(bool value, tVariant* ret) const;
-    void returnInt(int value, tVariant* ret) const;
 
     std::wstring variantToWString(const tVariant& value) const;
     int variantToInt(const tVariant& value) const;
